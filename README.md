@@ -1,3 +1,68 @@
+# **Challenge 7: Voting App Smart Contract**:
+
+Main features:
+
+- built using assembly script
+- support multiple smart elections in parallel
+- every election has a start date and an end date
+- candidates can be only added before the election is started
+- votes can be added only when the election is started and not yet ended
+- **View methods**: `get_elections`, `get_candidates`, `get_votes`
+- **Change methods**: `add_election`, `add_candidacy`, `add_vote`
+- Repository contains shell scripts with examples of contract calls
+
+Repository:
+https://github.com/oleksanderkorn/nearvember-challenge-7
+Deployment:
+https://explorer.testnet.near.org/transactions/EFqrCPcNoC5vsKZmvaSri7pNK3mWfknBXEMJ4oNzeN7C
+
+**Detailed Tutorial** with the whole process of the contract implementation:
+https://dev.to/lkskrn/building-a-voting-smart-contract-with-near-protocol-and-typescript-3p08
+
+Commands:
+
+Init contract:
+
+```
+near call $CONTRACT_NAME new --accountId $CONTRACT_NAME
+```
+
+Add election:
+
+```
+near call $CONTRACT_NAME add_election '{"title": "First election!", "description": "Testing the election model.", "startDate": "0", "endDate": "0"}' --accountId $CONTRACT_NAME
+```
+
+Get elections:
+
+```
+near view $CONTRACT_NAME get_elections
+```
+
+Add candidacy:
+
+```
+near call $CONTRACT_NAME add_candidacy '{"electionId": <election-id>, "name": "Donald Duck", "slogan": "Make river great again!", "goals": "Do good, do not do bad!"}' --accountId $CONTRACT_NAME
+```
+
+Get candidates:
+
+```
+near view $CONTRACT_NAME get_candidates '{"electionId": <election-id>}'
+```
+
+Add vote:
+
+```
+near call $CONTRACT_NAME add_vote '{"electionId": <election-id>, "candidateId": "dev-1637871596730-46015068107726", "comment": "I beleive that guy!"}' --accountId $CONTRACT_NAME
+```
+
+Get votes:
+
+```
+near view $CONTRACT_NAME get_votes '{"electionId": <election-id>}'
+```
+
 # `near-sdk-as` Starter Kit
 
 This is a good project to use as a starting point for your AssemblyScript project.
@@ -6,7 +71,8 @@ This is a good project to use as a starting point for your AssemblyScript projec
 
 This repository includes a complete project structure for AssemblyScript contracts targeting the NEAR platform.
 
-The example here is very basic.  It's a simple contract demonstrating the following concepts:
+The example here is very basic. It's a simple contract demonstrating the following concepts:
+
 - a single contract
 - the difference between `view` vs. `change` methods
 - basic contract storage
@@ -40,12 +106,11 @@ private storageReport(): string {}
 
 We say that an AssemblyScript contract is written in the "singleton style" when the `index.ts` file (the contract entry point) has a single exported class (the name of the class doesn't matter) that is decorated with `@nearBindgen`.
 
-In this case, all methods on the class become public contract methods unless marked `private`.  Also, all instance variables are stored as a serialized instance of the class under a special storage key named `STATE`.  AssemblyScript uses JSON for storage serialization (as opposed to Rust contracts which use a custom binary serialization format called borsh).
+In this case, all methods on the class become public contract methods unless marked `private`. Also, all instance variables are stored as a serialized instance of the class under a special storage key named `STATE`. AssemblyScript uses JSON for storage serialization (as opposed to Rust contracts which use a custom binary serialization format called borsh).
 
 ```ts
 @nearBindgen
 export class Contract {
-
   // return the string 'hello world'
   helloWorld(): string {}
 
@@ -61,7 +126,6 @@ export class Contract {
 }
 ```
 
-
 ## Usage
 
 ### Getting started
@@ -71,9 +135,9 @@ export class Contract {
 1. clone this repo to a local folder
 2. run `yarn`
 3. run `./scripts/1.dev-deploy.sh`
-3. run `./scripts/2.use-contract.sh`
-4. run `./scripts/2.use-contract.sh` (yes, run it to see changes)
-5. run `./scripts/3.cleanup.sh`
+4. run `./scripts/2.use-contract.sh`
+5. run `./scripts/2.use-contract.sh` (yes, run it to see changes)
+6. run `./scripts/3.cleanup.sh`
 
 ### Videos
 
@@ -85,13 +149,13 @@ This video shows the build and deployment of the contract.
 
 **`2.use-contract.sh`**
 
-This video shows contract methods being called.  You should run the script twice to see the effect it has on contract state.
+This video shows contract methods being called. You should run the script twice to see the effect it has on contract state.
 
 [![asciicast](https://asciinema.org/a/409577.svg)](https://asciinema.org/a/409577)
 
 **`3.cleanup.sh`**
 
-This video shows the cleanup script running.  Make sure you add the `BENEFICIARY` environment variable. The script will remind you if you forget.
+This video shows the cleanup script running. Make sure you add the `BENEFICIARY` environment variable. The script will remind you if you forget.
 
 ```sh
 export BENEFICIARY=<your-account-here>   # this account receives contract account balance

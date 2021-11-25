@@ -1,90 +1,13 @@
+import { PersistentSet, context, PersistentMap, RNG } from "near-sdk-core";
+import { Timestamp } from "../../utils";
 import {
-  PersistentSet,
-  context,
-  u128,
-  PersistentMap,
-  RNG,
-} from "near-sdk-core";
-import { AccountId, Timestamp } from "../../utils";
-
-@nearBindgen
-class Candidate {
-  constructor(
-    public accountId: AccountId,
-    public registrationDate: Timestamp,
-    public name: string,
-    public slogan: string,
-    public goals: string
-  ) {}
-}
-
-@nearBindgen
-class Election {
-  public candidates: PersistentSet<Candidate>;
-  public candidateIds: PersistentSet<string>;
-  public votes: PersistentMap<AccountId, PersistentSet<Vote>>;
-  public voters: PersistentSet<AccountId>;
-  public electionInfo: ElectionInfo;
-
-  constructor(
-    id: u32,
-    initiator: AccountId,
-    creationDate: Timestamp,
-    startDate: Timestamp,
-    endDate: Timestamp,
-    title: string,
-    description: string
-  ) {
-    this.electionInfo = new ElectionInfo(
-      id,
-      initiator,
-      creationDate,
-      startDate,
-      endDate,
-      title,
-      description
-    );
-    this.candidates = new PersistentSet<Candidate>(`e${id}_c`);
-    this.votes = new PersistentMap<AccountId, PersistentSet<Vote>>(`e${id}_v`);
-    this.candidateIds = new PersistentSet<string>(`e${id}_ci`);
-    this.voters = new PersistentSet<AccountId>(`e${id}_vt`);
-  }
-}
-
-@nearBindgen
-class ElectionInfo {
-  constructor(
-    public id: u32,
-    public initiator: AccountId,
-    public creationDate: Timestamp,
-    public startDate: Timestamp,
-    public endDate: Timestamp,
-    public title: string,
-    public description: string
-  ) {}
-}
-
-@nearBindgen
-class Vote {
-  constructor(
-    public accountId: AccountId,
-    public date: Timestamp,
-    public candidateId: AccountId,
-    public comment: string,
-    public donation: u128
-  ) {}
-}
-
-@nearBindgen
-class CandidateVotes {
-  constructor(public candidate: Candidate, public votes: Vote[]) {}
-}
-
-@nearBindgen
-class ElectionVotes {
-  constructor(public election: ElectionInfo, public votes: CandidateVotes[]) {}
-}
-
+  Candidate,
+  CandidateVotes,
+  Election,
+  ElectionInfo,
+  ElectionVotes,
+  Vote,
+} from "./model";
 @nearBindgen
 export class Contract {
   private elections: PersistentMap<u32, Election>;
@@ -112,9 +35,6 @@ export class Contract {
     return this.elections.getSome(electionId).candidates.values();
   }
 
-  /**
-   * @returns List of candidates with votes.
-   */
   get_votes(electionId: u32): ElectionVotes {
     assert(
       this.elections.contains(electionId),
@@ -138,15 +58,26 @@ export class Contract {
   }
 
   @mutateState()
-  add_election(title: string, description: string): void {
-    const rng = new RNG<u32>(1, u32.MAX_VALUE);
+  add_election(
+    title: string,
+    description: string,
+    startDate: Timestamp,
+    endDate: Timestamp
+  ): void {
+    const rng = new RNG<u16>(1, u16.MAX_VALUE);
     const electionId = rng.next();
+    const start =
+      startDate > 0
+        ? startDate * 1000000
+        : context.blockTimestamp + 86400000000000;
     const election = new Election(
       electionId,
       context.sender,
       context.blockTimestamp,
-      context.blockTimestamp + 86400000000000, // TODO pass startDate as argument
-      context.blockTimestamp + 86400000000000 * 7, // TODO pass endDate as argument
+      startDate > 0
+        ? startDate * 1000000
+        : context.blockTimestamp + 86400000000000,
+      endDate > 0 ? endDate * 1000000 : start + 86400000000000 * 7,
       title,
       description
     );
@@ -203,11 +134,11 @@ export class Contract {
     );
     const election = this.elections.getSome(electionId);
     assert(
-      election.electionInfo.startDate > context.blockTimestamp,
+      election.electionInfo.startDate < context.blockTimestamp,
       "Could not add vote to the election which is not yet started."
     );
     assert(
-      election.electionInfo.endDate < context.blockTimestamp,
+      election.electionInfo.endDate > context.blockTimestamp,
       "Could not add vote to the election which is already finished."
     );
     const voterId = context.sender;

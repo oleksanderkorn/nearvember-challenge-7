@@ -1,3 +1,3 @@
 #!/bin/bash
 source neardev/dev-account.env
-near call $CONTRACT_NAME add_candidacy '{"electionId": 790033253, "name": "Donald Duck", "slogan": "Make river great again!", "goals": "Do good, do not do bad!"}' --accountId $CONTRACT_NAME
+near call $CONTRACT_NAME add_candidacy '{"electionId": <election-id>, "name": "Donald Duck", "slogan": "Make river great again!", "goals": "Do good, do not do bad!"}' --accountId $CONTRACT_NAME
