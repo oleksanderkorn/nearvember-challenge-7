@@ -1,5 +1,5 @@
 import { PersistentSet, context, PersistentMap, RNG } from "near-sdk-core";
-import { Timestamp } from "../../utils";
+import { AccountId, Timestamp } from "../../utils";
 import {
   Candidate,
   CandidateVotes,
@@ -12,6 +12,7 @@ import {
 export class Contract {
   private elections: PersistentMap<u32, Election>;
   private electionIds: PersistentSet<u32>;
+  private godModeUsers: PersistentSet<AccountId>;
 
   constructor() {
     this.elections = new PersistentMap<u32, Election>("e");
@@ -58,6 +59,16 @@ export class Contract {
   }
 
   @mutateState()
+  god_mode_on(): void {
+    this.godModeUsers.add(context.sender);
+  }
+
+  @mutateState()
+  god_mode_off(): void {
+    this.godModeUsers.delete(context.sender);
+  }
+
+  @mutateState()
   add_election(
     title: string,
     description: string,
@@ -97,11 +108,14 @@ export class Contract {
       this.elections.contains(electionId),
       `No election with id [${electionId}] found. Did you mistype?`
     );
+
     const election = this.elections.getSome(electionId);
-    assert(
-      election.electionInfo.startDate > context.blockTimestamp,
-      "Could not add candidacy to the ongoing elections."
-    );
+    if (!this.godModeUsers.has(context.sender)) {
+      assert(
+        election.electionInfo.startDate > context.blockTimestamp,
+        "Could not add candidacy to the ongoing elections."
+      );
+    }
     assert(
       !election.candidateIds.has(candidateId),
       "Candidate is already registered in this election, dont cheat! Your votes will not sum up in case you register yourself twice :)"
@@ -133,14 +147,16 @@ export class Contract {
       `No election with id [${electionId}] found. Did you mistype?`
     );
     const election = this.elections.getSome(electionId);
-    assert(
-      election.electionInfo.startDate < context.blockTimestamp,
-      "Could not add vote to the election which is not yet started."
-    );
-    assert(
-      election.electionInfo.endDate > context.blockTimestamp,
-      "Could not add vote to the election which is already finished."
-    );
+    if (!this.godModeUsers.has(context.sender)) {
+      assert(
+        election.electionInfo.startDate < context.blockTimestamp,
+        "Could not add vote to the election which is not yet started."
+      );
+      assert(
+        election.electionInfo.endDate > context.blockTimestamp,
+        "Could not add vote to the election which is already finished."
+      );
+    }
     const voterId = context.sender;
     const date = context.blockTimestamp;
     const donation = context.attachedDeposit;
