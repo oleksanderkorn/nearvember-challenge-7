@@ -17,6 +17,7 @@ export class Contract {
   constructor() {
     this.elections = new PersistentMap<u32, Election>("e");
     this.electionIds = new PersistentSet<u32>("ei");
+    this.godModeUsers = new PersistentSet<AccountId>("gm");
   }
 
   get_elections(): ElectionInfo[] {

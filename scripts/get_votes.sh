@@ -1,3 +1,4 @@
 #!/bin/bash
 source neardev/dev-account.env
-near view $CONTRACT_NAME get_votes '{"electionId": 1068}'
+ELECTION_ID=59135
+near view $CONTRACT_NAME get_votes "{\"electionId\": $ELECTION_ID}"
