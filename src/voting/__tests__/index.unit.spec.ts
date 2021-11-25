@@ -10,7 +10,7 @@ describe("Contract", () => {
   // VIEW method tests
 
   it("should get empty candidates list", () => {
-    expect(contract.get_candidates()).toStrictEqual([]);
+    expect(contract.get_candidates(1)).toStrictEqual([]);
   });
 
   // it("Should fail with empty name", () => {

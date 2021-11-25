@@ -1,4 +1,10 @@
-import { PersistentSet, context, u128, PersistentMap } from "near-sdk-core";
+import {
+  PersistentSet,
+  context,
+  u128,
+  PersistentMap,
+  RNG,
+} from "near-sdk-core";
 import { AccountId, Timestamp } from "../../utils";
 
 @nearBindgen
@@ -9,6 +15,52 @@ class Candidate {
     public name: string,
     public slogan: string,
     public goals: string
+  ) {}
+}
+
+@nearBindgen
+class Election {
+  public candidates: PersistentSet<Candidate>;
+  public candidateIds: PersistentSet<string>;
+  public votes: PersistentMap<AccountId, PersistentSet<Vote>>;
+  public voters: PersistentSet<AccountId>;
+  public electionInfo: ElectionInfo;
+
+  constructor(
+    id: u32,
+    initiator: AccountId,
+    creationDate: Timestamp,
+    startDate: Timestamp,
+    endDate: Timestamp,
+    title: string,
+    description: string
+  ) {
+    this.electionInfo = new ElectionInfo(
+      id,
+      initiator,
+      creationDate,
+      startDate,
+      endDate,
+      title,
+      description
+    );
+    this.candidates = new PersistentSet<Candidate>(`e${id}_c`);
+    this.votes = new PersistentMap<AccountId, PersistentSet<Vote>>(`e${id}_v`);
+    this.candidateIds = new PersistentSet<string>(`e${id}_ci`);
+    this.voters = new PersistentSet<AccountId>(`e${id}_vt`);
+  }
+}
+
+@nearBindgen
+class ElectionInfo {
+  constructor(
+    public id: u32,
+    public initiator: AccountId,
+    public creationDate: Timestamp,
+    public startDate: Timestamp,
+    public endDate: Timestamp,
+    public title: string,
+    public description: string
   ) {}
 }
 
@@ -29,49 +81,99 @@ class CandidateVotes {
 }
 
 @nearBindgen
+class ElectionVotes {
+  constructor(public election: ElectionInfo, public votes: CandidateVotes[]) {}
+}
+
+@nearBindgen
 export class Contract {
-  private candidates: PersistentSet<Candidate>;
-  private candidateIds: PersistentSet<string>;
-  private votes: PersistentMap<AccountId, PersistentSet<Vote>>;
-  private voters: PersistentSet<AccountId>;
+  private elections: PersistentMap<u32, Election>;
+  private electionIds: PersistentSet<u32>;
 
   constructor() {
-    this.candidates = new PersistentSet<Candidate>("c");
-    this.votes = new PersistentMap<AccountId, PersistentSet<Vote>>("v");
-    this.candidateIds = new PersistentSet<string>("ci");
-    this.voters = new PersistentSet<AccountId>("vt");
+    this.elections = new PersistentMap<u32, Election>("e");
+    this.electionIds = new PersistentSet<u32>("ei");
   }
 
-  get_candidates(): Candidate[] {
-    return this.candidates.values();
+  get_elections(): ElectionInfo[] {
+    const electionIds = this.electionIds.values();
+    let elections: ElectionInfo[] = [];
+    for (let i: i32 = 0; i < electionIds.length; i++) {
+      elections.push(this.elections.getSome(electionIds[i]).electionInfo);
+    }
+    return elections;
+  }
+
+  get_candidates(electionId: u32): Candidate[] {
+    assert(
+      this.elections.contains(electionId),
+      `No election with id [${electionId}] found. Did you mistype?`
+    );
+    return this.elections.getSome(electionId).candidates.values();
   }
 
   /**
    * @returns List of candidates with votes.
    */
-  get_votes(): CandidateVotes[] {
-    const allCandidates = this.candidates.values();
+  get_votes(electionId: u32): ElectionVotes {
+    assert(
+      this.elections.contains(electionId),
+      `No election with id [${electionId}] found. Did you mistype?`
+    );
+    const election = this.elections.getSome(electionId);
+    const allCandidates = election.candidates.values();
     const candidatesVotes: CandidateVotes[] = [];
     for (let i: i32 = 0; i < allCandidates.length; i++) {
       const candidate = allCandidates[i];
       let votes: Vote[];
-      if (this.votes.contains(candidate.accountId)) {
-        votes = this.votes.getSome(candidate.accountId).values();
+      if (election.votes.contains(candidate.accountId)) {
+        votes = election.votes.getSome(candidate.accountId).values();
       } else {
         votes = [];
       }
       const candidateVote = new CandidateVotes(candidate, votes);
       candidatesVotes.push(candidateVote);
     }
-    return candidatesVotes;
+    return new ElectionVotes(election.electionInfo, candidatesVotes);
   }
 
   @mutateState()
-  add_candidacy(name: string, slogan: string, goals: string): void {
+  add_election(title: string, description: string): void {
+    const rng = new RNG<u32>(1, u32.MAX_VALUE);
+    const electionId = rng.next();
+    const election = new Election(
+      electionId,
+      context.sender,
+      context.blockTimestamp,
+      context.blockTimestamp + 86400000000000, // TODO pass startDate as argument
+      context.blockTimestamp + 86400000000000 * 7, // TODO pass endDate as argument
+      title,
+      description
+    );
+    this.electionIds.add(electionId);
+    this.elections.set(electionId, election);
+  }
+
+  @mutateState()
+  add_candidacy(
+    electionId: u32,
+    name: string,
+    slogan: string,
+    goals: string
+  ): void {
     const candidateId = context.sender;
     assert(
-      !this.candidateIds.has(candidateId),
-      "Candidate is already registered, dont cheat! Your votes will not sum up in case you register yourself twice :)"
+      this.elections.contains(electionId),
+      `No election with id [${electionId}] found. Did you mistype?`
+    );
+    const election = this.elections.getSome(electionId);
+    assert(
+      election.electionInfo.startDate > context.blockTimestamp,
+      "Could not add candidacy to the ongoing elections."
+    );
+    assert(
+      !election.candidateIds.has(candidateId),
+      "Candidate is already registered in this election, dont cheat! Your votes will not sum up in case you register yourself twice :)"
     );
     assert(
       name.length > 0,
@@ -88,22 +190,36 @@ export class Contract {
 
     const date = context.blockTimestamp;
     const candidate = new Candidate(candidateId, date, name, slogan, goals);
-    this.candidates.add(candidate);
-    this.candidateIds.add(candidateId);
+    election.candidates.add(candidate);
+    election.candidateIds.add(candidateId);
+    this.elections.set(electionId, election);
   }
 
   @mutateState()
-  add_vote(candidateId: string, comment: string): void {
+  add_vote(electionId: u32, candidateId: string, comment: string): void {
+    assert(
+      this.elections.contains(electionId),
+      `No election with id [${electionId}] found. Did you mistype?`
+    );
+    const election = this.elections.getSome(electionId);
+    assert(
+      election.electionInfo.startDate > context.blockTimestamp,
+      "Could not add vote to the election which is not yet started."
+    );
+    assert(
+      election.electionInfo.endDate < context.blockTimestamp,
+      "Could not add vote to the election which is already finished."
+    );
     const voterId = context.sender;
     const date = context.blockTimestamp;
     const donation = context.attachedDeposit;
     assert(
-      this.candidateIds.has(candidateId),
+      election.candidateIds.has(candidateId),
       "Candidate is not registered in the election. Maybe you mistyped his account id?"
     );
 
-    assert(!this.voters.has(voterId), "Sorry, you can only vote once!");
-    this.voters.add(voterId);
+    assert(!election.voters.has(voterId), "Sorry, you can only vote once!");
+    election.voters.add(voterId);
     const vote = new Vote(
       voterId,
       date,
@@ -112,11 +228,12 @@ export class Contract {
       donation
     );
 
-    let votes = this.votes.get(candidateId);
+    let votes = election.votes.get(candidateId);
     if (votes == null) {
       votes = new PersistentSet<Vote>("vt");
     }
     votes.add(vote);
-    this.votes.set(candidateId, votes);
+    election.votes.set(candidateId, votes);
+    this.elections.set(electionId, election);
   }
 }
